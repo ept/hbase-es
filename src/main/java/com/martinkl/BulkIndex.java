@@ -44,20 +44,27 @@ public class BulkIndex {
     public static void main(String[] args) throws Exception {
         new JobConf().setSpeculativeExecution(false);
         Configuration conf = new Configuration();
-        conf.setBoolean("mapred.map.tasks.speculative.execution", false);    
-        conf.setBoolean("mapred.reduce.tasks.speculative.execution", false); 
         conf.set("es.nodes", ES_NODES);
         conf.set("es.resource", ES_RESOURCE);
+        conf.set("es.mapping.id", HBaseTableMapper.ID_FIELD.toString());
+        conf.set("es.batch.size.bytes", "10mb");
+        conf.set("es.batch.size.entries", "10000");
+        conf.set("es.batch.write.refresh", "false");
 
         Job job = new Job(conf);
         job.setJarByClass(BulkIndex.class);
         job.setMapperClass(HBaseTableMapper.class);
         job.setNumReduceTasks(0);
+        job.setSpeculativeExecution(false);
         job.setOutputFormatClass(EsOutputFormat.class);
         job.setMapOutputValueClass(MapWritable.class); 
 
-        TableMapReduceUtil.initTableMapperJob(BulkLoad.HBASE_TABLE_NAME, new Scan(),
-            HBaseTableMapper.class, ImmutableBytesWritable.class, Result.class, job);
+        Scan scan = new Scan();
+        scan.setCaching(1000);
+        scan.setCacheBlocks(false);
+
+        TableMapReduceUtil.initTableMapperJob(BulkLoad.HBASE_TABLE_NAME, scan,
+            HBaseTableMapper.class, NullWritable.class, MapWritable.class, job);
 
         job.waitForCompletion(true);
     }
