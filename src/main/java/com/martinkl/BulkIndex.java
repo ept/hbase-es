@@ -1,6 +1,7 @@
 package com.martinkl;
 
 import java.io.IOException;
+import java.util.HashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
@@ -12,7 +13,7 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.Job;
-import org.elasticsearch.hadoop.mr.EsOutputFormat;
+import org.codehaus.jackson.map.ObjectMapper;
 
 /**
  * To run this:
@@ -27,17 +28,18 @@ public class BulkIndex {
     public static final String ES_NODES = "localhost:9200";
     public static final String ES_RESOURCE = "docs/doc";
 
-    public static class HBaseTableMapper extends TableMapper<NullWritable, MapWritable> {
-        private static final Text ID_FIELD = new Text("id");
-        private static final Text TEXT_FIELD = new Text("text");
+    public static class HBaseTableMapper extends TableMapper<NullWritable, Text> {
+        private static final String ID_FIELD = "id";
+        private static final String TEXT_FIELD = "text";
+        private static final ObjectMapper mapper = new ObjectMapper();
 
         @Override
         protected void map(ImmutableBytesWritable key, Result value, Context context)
                 throws IOException, InterruptedException {
-            MapWritable doc = new MapWritable();
-            doc.put(ID_FIELD, new Text(key.get()));
-            doc.put(TEXT_FIELD, new Text(value.getValue(BulkLoad.HBASE_COL_FAMILY, BulkLoad.HBASE_COL_NAME)));
-            context.write(NullWritable.get(), doc);
+            HashMap<String, String> json = new HashMap<>();
+            json.put(ID_FIELD, new String(key.get()));
+            json.put(TEXT_FIELD, new String(value.getValue(BulkLoad.HBASE_COL_FAMILY, BulkLoad.HBASE_COL_NAME)));
+            context.write(NullWritable.get(), new Text(mapper.writeValueAsBytes(json)));
         }
     }
 
@@ -56,8 +58,8 @@ public class BulkIndex {
         job.setMapperClass(HBaseTableMapper.class);
         job.setNumReduceTasks(0);
         job.setSpeculativeExecution(false);
-        job.setOutputFormatClass(EsOutputFormat.class);
-        job.setMapOutputValueClass(MapWritable.class); 
+        job.setOutputFormatClass(BulkProcessorOutputFormat.class);
+        job.setMapOutputValueClass(Text.class); 
 
         Scan scan = new Scan();
         scan.setCaching(1000);
